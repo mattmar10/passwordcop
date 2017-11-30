@@ -1,5 +1,7 @@
 package com.mattmartin.example.impl
 
+import java.time.Instant
+
 import com.mattmartin.example.api.PasswordHistoryItem
 import com.github.t3hnar.bcrypt._
 import org.slf4j.LoggerFactory
@@ -24,7 +26,7 @@ object PasswordValidator {
     */
   def validatePasswordForUser(userIdEmail: String,
                               newPassword: String,
-                              passwordHistory: Option[Seq[PasswordHistoryItem]]): Option[String] = {
+                              passwordHistory: Option[Seq[PasswordHistoryItem]]): Option[PasswordHistoryItem] = {
 
     //first validate pattern
     val valid = newPassword.matches(PATTERN)
@@ -36,15 +38,14 @@ object PasswordValidator {
       }
       case true => {
         val encrypted = encryptPassword(newPassword)
-
+        val time = Instant.now.toEpochMilli
         //if there is no password history, ensure it meets requirements. If there is a history, cannot re-use passwords.
         passwordHistory match {
-          case None => Some(encrypted)
+          case None => Some(PasswordHistoryItem(userIdEmail, encrypted, Some(time), Some(time + PasswordValidator.PASSWORD_EXPIRATION_MS)))
           case Some(passwords) => {
-            val usedPreviously = passwords.exists(p => p.encryptedPassword == encrypted)
 
-            usedPreviously match {
-              case false => Some(encrypted)
+              PasswordValidator.usedPreviously(newPassword, passwords) match {
+              case false => Some(PasswordHistoryItem(userIdEmail, encrypted, Some(time), Some(time + PasswordValidator.PASSWORD_EXPIRATION_MS)))
               case true =>{
                 log.info(s"[$userIdEmail] attempted to use a previously used password")
                 None
@@ -57,6 +58,10 @@ object PasswordValidator {
   }
 
   def encryptPassword(password: String): String = {
-    password.bcrypt
+    password.bcrypt(12)
+  }
+
+  def usedPreviously(newPassword: String, passwords: Seq[PasswordHistoryItem]): Boolean = {
+    passwords.exists(phi => newPassword.isBcrypted(phi.encryptedPassword))
   }
 }

@@ -1,6 +1,7 @@
 package com.mattmartin.example.impl
 
 import com.lightbend.lagom.internal.scaladsl.persistence.protobuf.msg.PersistenceMessages.Exception
+import com.lightbend.lagom.scaladsl.api.transport.TransportException
 import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.InvalidCommandException
 import com.lightbend.lagom.scaladsl.server.LocalServiceLocator
 import com.lightbend.lagom.scaladsl.testkit.ServiceTest
@@ -25,9 +26,8 @@ class PasswordCopServiceSpec extends AsyncWordSpec with Matchers with BeforeAndA
 
       "invalid password check should throw InvalidCommandException" in {
 
-        val f = client.changePassword.invoke(ChangePasswordMessage("bob@bobsemail.com", "toosimple"))
-        ScalaFutures.whenReady(f) { answer =>
-          answer shouldBe a [InvalidCommandException]
+        recoverToSucceededIf[TransportException]{
+          client.changePassword.invoke(ChangePasswordMessage("bob@bobsemail.com", "toosimple"))
         }
     }
 
@@ -45,6 +45,18 @@ class PasswordCopServiceSpec extends AsyncWordSpec with Matchers with BeforeAndA
 
       client.changePassword.invoke( ChangePasswordMessage("bob2@bobsemail.com", "pAssWordIs!@Strong1234")).map { answer =>
         answer should === ( ChangePasswordResponseMessage("bob2@bobsemail.com", true, None) )
+      }
+    }
+
+    "invalid password check, reusing password for existing" in {
+      client.changePassword.invoke( ChangePasswordMessage("bob3@bobsemail.com", "pAssWordIs!@Strong123")).map { answer =>
+        answer should === ( ChangePasswordResponseMessage("bob3@bobsemail.com", true, None) )
+      }
+
+      recoverToSucceededIf[TransportException] {
+        client.changePassword.invoke(ChangePasswordMessage("bob3@bobsemail.com", "pAssWordIs!@Strong123")).map { answer =>
+          answer should ===(ChangePasswordResponseMessage("bob3@bobsemail.com", true, None))
+        }
       }
     }
 

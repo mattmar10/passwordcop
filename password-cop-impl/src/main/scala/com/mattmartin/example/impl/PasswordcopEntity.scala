@@ -8,8 +8,8 @@ import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.ReplyType
 import com.lightbend.lagom.scaladsl.playjson.{JsonSerializer, JsonSerializerRegistry}
 import com.mattmartin.example.api.PasswordHistoryItem
 import play.api.libs.json.{Format, Json}
-
 import com.github.t3hnar.bcrypt._
+import com.mattmartin.example.impl
 
 import scala.collection.immutable.Seq
 
@@ -18,9 +18,9 @@ import scala.collection.immutable.Seq
   * stores what the greeting should be (eg, "Hello").
   *
   * Event sourced entities are interacted with by sending them commands. This
-  * entity supports two commands, a [[UseGreetingMessage]] command, which is
-  * used to change the greeting, and a [[Hello]] command, which is a read
-  * only command which returns a greeting to the name specified by the command.
+  * entity supports two commands, a [[ChangePasswordRequest]] command, which is
+  * used to change the password, and a [[GetLastPasswordChanged]] command, which is a read
+  * only command which returns an optional with the last password change.
   *
   * Commands get translated to events, and it's the events that get persisted by
   * the entity. Each event will have an event handler registered for it, and an
@@ -29,8 +29,9 @@ import scala.collection.immutable.Seq
   * loaded from the database - each event will be replayed to recreate the state
   * of the entity.
   *
-  * This entity defines one event, the [[GreetingMessageChanged]] event,
-  * which is emitted when a [[UseGreetingMessage]] command is received.
+  * This entity defines one event, the [[PasswordChangeSuccessulEvent]] event,
+  * which is emitted on a successful password change -
+  * when a [[ChangePasswordRequest]] command is received and the password meets requirements.
   */
 class PasswordcopEntity extends PersistentEntity {
 
@@ -48,58 +49,6 @@ class PasswordcopEntity extends PersistentEntity {
     * An entity can define different behaviours for different states, so the behaviour
     * is a function of the current state to a set of actions.
     */
-  /*override def behavior: Behavior = {
-    case (state: PasswordEntityState) => Actions().onCommand[UseGreetingMessage, Done] {
-
-      // Command handler for the UseGreetingMessage command
-      case (UseGreetingMessage(newMessage), ctx, state) =>
-        // In response to this command, we want to first persist it as a
-        // GreetingMessageChanged event
-        ctx.thenPersist(
-          GreetingMessageChanged(newMessage)
-        ) { _ =>
-          // Then once the event is successfully persisted, we respond with done.
-          ctx.reply(Done)
-        }
-
-    }.onCommand[ChangePasswordRequest, PasswordHistoryItem]{
-      case (ChangePasswordRequest(email, pass), ctx, state) => {
-
-          val evt = PasswordChangeSuccessulEvent(email, Instant.now.toEpochMilli, Instant.now.toEpochMilli + 25000)
-          ctx.thenPersist(evt)
-          {_ => ctx.reply(state.)}
-      }
-    }.onReadOnlyCommand[Hello, String] {
-
-      // Command handler for the Hello command
-      case (Hello(name), ctx, state) =>
-        // Reply with a message built from the current message, and the name of
-        // the person we're meant to say hello to.
-        ctx.reply(s"$message, $name!")
-
-    }.onEvent {
-
-      // Event handler for the GreetingMessageChanged event
-      case (GreetingMessageChanged(newMessage), state) =>
-        // We simply update the current state to use the greeting message from
-        // the event.
-        PasswordcopState(newMessage, LocalDateTime.now().toString)
-
-    }
-  }*/
-  def validateNewPassword(userIdEmail: String, newPass: String, history: Option[Seq[PasswordHistoryItem]]) : Option[PasswordHistoryItem] = {
-
-    PasswordValidator.validatePasswordForUser(userIdEmail, newPass, history) match {
-      case None => None
-      case Some(encryptedPassword) => {
-        val time = Instant.now.toEpochMilli
-        val passwordHistoryItem = PasswordHistoryItem(userIdEmail, encryptedPassword, Some(time), Some(time + PasswordValidator.PASSWORD_EXPIRATION_MS) )
-        Some(passwordHistoryItem)
-      }
-    }
-  }
-
-
   override def behavior: Behavior = {
     case None => notCreated
     case _ => created
@@ -115,12 +64,11 @@ class PasswordcopEntity extends PersistentEntity {
   private val notCreated = {
     Actions().onCommand[ChangePasswordRequest, Option[PasswordHistoryItem]] {
       case ((cpr: ChangePasswordRequest), ctx, state) =>
-        val passwordHistoryMaybe = validateNewPassword(cpr.emailId, cpr.password, None)
+        val passwordHistoryMaybe = PasswordValidator.validatePasswordForUser(cpr.emailId, cpr.password, None)
 
         passwordHistoryMaybe match{
           case None => {
             ctx.invalidCommand("Unable to create password. Validation failed.")
-            //ctx.reply(passwordHistoryMaybe)
             ctx.done
           }
           case Some(phi) => ctx.thenPersist(PasswordChangeSuccessulEvent(phi))(_ => ctx.reply(passwordHistoryMaybe))
@@ -129,7 +77,9 @@ class PasswordcopEntity extends PersistentEntity {
       case ((glpc: GetLastPasswordChanged), ctx, state) => ctx.reply(None)
     }.onEvent {
       case (pcse: PasswordChangeSuccessulEvent, state) =>
-        Some(PasswordEntityState(pcse.passwordHistoryItem.userIdEmail, List(pcse.passwordHistoryItem), LocalDateTime.now.toString ))
+        Some(PasswordEntityState(pcse.passwordHistoryItem.userIdEmail,
+          List(pcse.passwordHistoryItem),
+          LocalDateTime.now.toString ))
       // if this happens, just do nothing and return state
       case (_, state) => state
     }.orElse(getLastPasswordCommand)
@@ -138,12 +88,12 @@ class PasswordcopEntity extends PersistentEntity {
   private val created = {
     Actions().onCommand[ChangePasswordRequest, Option[PasswordHistoryItem]] {
       case ((cpr: ChangePasswordRequest), ctx, state) =>
-        val passwordHistoryMaybe = validateNewPassword(cpr.emailId, cpr.password, None)
+        val passwordHistoryMaybe =
+          PasswordValidator.validatePasswordForUser(cpr.emailId, cpr.password, Some(state.get.passwordHistory))
 
         passwordHistoryMaybe match{
           case None => {
             ctx.invalidCommand("Unable to create password. Validation failed.")
-            //ctx.reply(passwordHistoryMaybe)
             ctx.done
           }
           case Some(phi) => ctx.thenPersist(PasswordChangeSuccessulEvent(phi))(_ => ctx.reply(passwordHistoryMaybe))
