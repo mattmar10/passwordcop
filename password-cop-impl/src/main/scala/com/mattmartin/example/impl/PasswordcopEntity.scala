@@ -9,10 +9,12 @@ import com.lightbend.lagom.scaladsl.playjson.{JsonSerializer, JsonSerializerRegi
 import com.mattmartin.example.api.PasswordHistoryItem
 import play.api.libs.json.{Format, Json}
 
+import com.github.t3hnar.bcrypt._
+
 import scala.collection.immutable.Seq
 
 /**
-  * This is an event sourced entity. It has a state, [[PasswordcopState]], which
+  * This is an event sourced entity. It has a state, [[PasswordEntityState]], which
   * stores what the greeting should be (eg, "Hello").
   *
   * Event sourced entities are interacted with by sending them commands. This
@@ -86,11 +88,12 @@ class PasswordcopEntity extends PersistentEntity {
     }
   }*/
   def validateNewPassword(userIdEmail: String, newPass: String, history: Option[Seq[PasswordHistoryItem]]) : Option[PasswordHistoryItem] = {
+
     PasswordValidator.validatePasswordForUser(userIdEmail, newPass, history) match {
-      case false => None
-      case true => {
+      case None => None
+      case Some(encryptedPassword) => {
         val time = Instant.now.toEpochMilli
-        val passwordHistoryItem = PasswordHistoryItem(userIdEmail, newPass, Some(time), Some(time + PasswordValidator.PASSWORD_EXPIRATION_MS) )
+        val passwordHistoryItem = PasswordHistoryItem(userIdEmail, encryptedPassword, Some(time), Some(time + PasswordValidator.PASSWORD_EXPIRATION_MS) )
         Some(passwordHistoryItem)
       }
     }
@@ -112,12 +115,12 @@ class PasswordcopEntity extends PersistentEntity {
   private val notCreated = {
     Actions().onCommand[ChangePasswordRequest, Option[PasswordHistoryItem]] {
       case ((cpr: ChangePasswordRequest), ctx, state) =>
-        val passwordHistoryMaybe = validateNewPassword(cpr.emailId, cpr.encryptedPassword, None)
+        val passwordHistoryMaybe = validateNewPassword(cpr.emailId, cpr.password, None)
 
         passwordHistoryMaybe match{
           case None => {
-            //ctx.invalidCommand("Unable to create password")
-            ctx.reply(passwordHistoryMaybe)
+            ctx.invalidCommand("Unable to create password. Validation failed.")
+            //ctx.reply(passwordHistoryMaybe)
             ctx.done
           }
           case Some(phi) => ctx.thenPersist(PasswordChangeSuccessulEvent(phi))(_ => ctx.reply(passwordHistoryMaybe))
@@ -135,9 +138,16 @@ class PasswordcopEntity extends PersistentEntity {
   private val created = {
     Actions().onCommand[ChangePasswordRequest, Option[PasswordHistoryItem]] {
       case ((cpr: ChangePasswordRequest), ctx, state) =>
-        val time = Instant.now.toEpochMilli
-        val passwordHistoryItem:PasswordHistoryItem = PasswordHistoryItem(cpr.emailId, cpr.encryptedPassword, Some(time), Some(time + 25000) )
-        ctx.thenPersist(PasswordChangeSuccessulEvent(passwordHistoryItem))(_ => ctx.reply(Some(passwordHistoryItem)))
+        val passwordHistoryMaybe = validateNewPassword(cpr.emailId, cpr.password, None)
+
+        passwordHistoryMaybe match{
+          case None => {
+            ctx.invalidCommand("Unable to create password. Validation failed.")
+            //ctx.reply(passwordHistoryMaybe)
+            ctx.done
+          }
+          case Some(phi) => ctx.thenPersist(PasswordChangeSuccessulEvent(phi))(_ => ctx.reply(passwordHistoryMaybe))
+        }
     }.onReadOnlyCommand[GetLastPasswordChanged, Option[PasswordHistoryItem]]{
       case ((glpc: GetLastPasswordChanged), ctx, state) => {
         state match {
@@ -157,23 +167,12 @@ class PasswordcopEntity extends PersistentEntity {
     }.orElse(getLastPasswordCommand)
   }
 
-
 }
-
-
-
-/**
-  * The current state held by the persistent entity.
-  */
-case class PasswordcopState(message: String,  timestamp: String)
 
 case class PasswordEntityState(emailId: String, passwordHistory: List[PasswordHistoryItem], timestamp: String)
 
 object PasswordEntityState{
-  implicit val format: Format[PasswordEntityState] = Json.format
-}
 
-object PasswordcopState {
   /**
     * Format for the hello state.
     *
@@ -183,7 +182,7 @@ object PasswordcopState {
     * snapshot. Hence, a JSON format needs to be declared so that it can be
     * serialized and deserialized when storing to and from the database.
     */
-  implicit val format: Format[PasswordcopState] = Json.format
+  implicit val format: Format[PasswordEntityState] = Json.format
 }
 
 /**
@@ -204,24 +203,14 @@ object PasswordcopEvent {
 case class PasswordChangeSuccessulEvent(passwordHistoryItem: PasswordHistoryItem) extends PasswordcopEvent
 
 object PasswordChangeSuccessulEvent{
-  implicit val format: Format[PasswordChangeSuccessulEvent] = Json.format
-}
-
-
-/**
-  * An event that represents a change in greeting message.
-  */
-case class GreetingMessageChanged(message: String) extends PasswordcopEvent
-
-object GreetingMessageChanged {
 
   /**
-    * Format for the greeting message changed event.
+    * Format for the password change successful event.
     *
     * Events get stored and loaded from the database, hence a JSON format
     * needs to be declared so that they can be serialized and deserialized.
     */
-  implicit val format: Format[GreetingMessageChanged] = Json.format
+  implicit val format: Format[PasswordChangeSuccessulEvent] = Json.format
 }
 
 /**
@@ -230,56 +219,30 @@ object GreetingMessageChanged {
 sealed trait PasswordcopCommand[R] extends ReplyType[R]
 
 /**
-  * A command to switch the greeting message.
+  * A command to get the last password history item.
   *
-  * It has a reply type of [[Done]], which is sent back to the caller
-  * when all the events emitted by this command are successfully persisted.
+  * The reply type is [[Option[PasswordHistoryItem]], and will an option of the last password history item
+  * for the given emailId.
   */
-case class UseGreetingMessage(message: String) extends PasswordcopCommand[Done]
-
-object UseGreetingMessage {
-
-  /**
-    * Format for the use greeting message command.
-    *
-    * Persistent entities get sharded across the cluster. This means commands
-    * may be sent over the network to the node where the entity lives if the
-    * entity is not on the same node that the command was issued from. To do
-    * that, a JSON format needs to be declared so the command can be serialized
-    * and deserialized.
-    */
-  implicit val format: Format[UseGreetingMessage] = Json.format
-}
-
-/**
-  * A command to say hello to someone using the current greeting message.
-  *
-  * The reply type is String, and will contain the message to say to that
-  * person.
-  */
-case class Hello(name: String) extends PasswordcopCommand[String]
-
-object Hello {
-
-  /**
-    * Format for the hello command.
-    *
-    * Persistent entities get sharded across the cluster. This means commands
-    * may be sent over the network to the node where the entity lives if the
-    * entity is not on the same node that the command was issued from. To do
-    * that, a JSON format needs to be declared so the command can be serialized
-    * and deserialized.
-    */
-  implicit val format: Format[Hello] = Json.format
-}
 
 case class GetLastPasswordChanged(emailId: String) extends PasswordcopCommand[Option[PasswordHistoryItem]]
 
 object GetLastPasswordChanged{
+
+  /**
+    * Format for the GetLastPasswordChanged command.
+    *
+    * Persistent entities get sharded across the cluster. This means commands
+    * may be sent over the network to the node where the entity lives if the
+    * entity is not on the same node that the command was issued from. To do
+    * that, a JSON format needs to be declared so the command can be serialized
+    * and deserialized.
+    */
   implicit val format: Format[GetLastPasswordChanged] = Json.format
 }
 
-case class ChangePasswordRequest(emailId: String, encryptedPassword: String) extends PasswordcopCommand[Option[PasswordHistoryItem]]
+case class ChangePasswordRequest(emailId: String, password: String)
+  extends PasswordcopCommand[Option[PasswordHistoryItem]]
 
 object ChangePasswordRequest{
   implicit val format: Format[ChangePasswordRequest] = Json.format
@@ -296,9 +259,7 @@ object ChangePasswordRequest{
   */
 object PasswordcopSerializerRegistry extends JsonSerializerRegistry {
   override def serializers: Seq[JsonSerializer[_]] = Seq(
-    JsonSerializer[UseGreetingMessage],
     JsonSerializer[GetLastPasswordChanged],
-    JsonSerializer[GreetingMessageChanged],
     JsonSerializer[ChangePasswordRequest],
     JsonSerializer[PasswordEntityState]
   )

@@ -7,6 +7,7 @@ import com.lightbend.lagom.scaladsl.api.broker.Topic
 import com.lightbend.lagom.scaladsl.broker.TopicProducer
 import com.lightbend.lagom.scaladsl.persistence.{EventStreamElement, PersistentEntityRegistry}
 import com.mattmartin.example.api.{ChangePasswordResponseMessage, PasswordChanged, PasswordCopService}
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -15,7 +16,9 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class PasswordcopServiceImpl(persistentEntityRegistry: PersistentEntityRegistry) (implicit ec: ExecutionContext) extends PasswordCopService {
 
-  override def hello(id: String) = ServiceCall { _ =>
+  private val log = LoggerFactory.getLogger(classOf[PasswordcopServiceImpl])
+
+  /*override def hello(id: String) = ServiceCall { _ =>
     // Look up the password-cop entity for the given ID.
     val ref = persistentEntityRegistry.refFor[PasswordcopEntity](id)
 
@@ -29,7 +32,7 @@ class PasswordcopServiceImpl(persistentEntityRegistry: PersistentEntityRegistry)
 
     // Tell the entity to use the greeting message specified.
     ref.ask(UseGreetingMessage(request.message))
-  }
+  }*/
 
   override def changePassword = ServiceCall { request =>
     val ref = persistentEntityRegistry.refFor[PasswordcopEntity](request.userId)

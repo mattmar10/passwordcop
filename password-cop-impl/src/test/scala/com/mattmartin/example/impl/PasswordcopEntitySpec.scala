@@ -23,6 +23,7 @@ class PasswordcopEntitySpec extends WordSpec with Matchers with BeforeAndAfterAl
 
   "password-cop entity" should {
 
+    /*
     "say hello by default" in withTestDriver { driver =>
       val outcome = driver.run(Hello("Alice"))
       outcome.replies should contain only "Hello, Alice!"
@@ -34,6 +35,7 @@ class PasswordcopEntitySpec extends WordSpec with Matchers with BeforeAndAfterAl
       val outcome2 = driver.run(Hello("Alice"))
       outcome2.replies should contain only "Hi, Alice!"
     }
+    */
 
   }
 }

@@ -21,13 +21,13 @@ trait PasswordCopService extends Service {
   /**
     * Example: curl http://localhost:9000/api/hello/Alice
     */
-  def hello(id: String): ServiceCall[NotUsed, String]
+  //def hello(id: String): ServiceCall[NotUsed, String]
 
   /**
     * Example: curl -H "Content-Type: application/json" -X POST -d '{"message":
     * "Hi"}' http://localhost:9000/api/hello/Alice
     */
-  def useGreeting(id: String): ServiceCall[GreetingMessage, Done]
+  //def useGreeting(id: String): ServiceCall[GreetingMessage, Done]
 
   def changePassword: ServiceCall[ChangePasswordMessage, ChangePasswordResponseMessage]
 
@@ -46,8 +46,8 @@ trait PasswordCopService extends Service {
     // @formatter:off
     named("password-cop")
       .withCalls(
-        pathCall("/api/hello/:id", hello _),
-        pathCall("/api/hello/:id", useGreeting _),
+        //pathCall("/api/hello/:id", hello _),
+        //pathCall("/api/hello/:id", useGreeting _),
         pathCall("/api/checkPasswordExpiration/:userIdEmail", checkPasswordExpired _),
         pathCall("/api/changePassword", changePassword )
       )

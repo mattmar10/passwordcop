@@ -6,6 +6,7 @@ scalaVersion in ThisBuild := "2.11.8"
 
 val macwire = "com.softwaremill.macwire" %% "macros" % "2.2.5" % "provided"
 val scalaTest = "org.scalatest" %% "scalatest" % "3.0.1" % Test
+val bcrypt =  "com.github.t3hnar" %% "scala-bcrypt" % "3.0"
 
 lazy val `password-cop` = (project in file("."))
   .aggregate(`password-cop-api`, `password-cop-impl`, `password-cop-stream-api`, `password-cop-stream-impl`)
@@ -25,6 +26,7 @@ lazy val `password-cop-impl` = (project in file("password-cop-impl"))
       lagomScaladslKafkaBroker,
       lagomScaladslTestKit,
       macwire,
+      bcrypt,
       scalaTest
     )
   )

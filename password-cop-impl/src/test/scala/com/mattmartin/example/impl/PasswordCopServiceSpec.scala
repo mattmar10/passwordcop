@@ -1,9 +1,12 @@
 package com.mattmartin.example.impl
 
+import com.lightbend.lagom.internal.scaladsl.persistence.protobuf.msg.PersistenceMessages.Exception
+import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.InvalidCommandException
 import com.lightbend.lagom.scaladsl.server.LocalServiceLocator
 import com.lightbend.lagom.scaladsl.testkit.ServiceTest
 import org.scalatest.{AsyncWordSpec, BeforeAndAfterAll, Matchers}
 import com.mattmartin.example.api.{ChangePasswordMessage, ChangePasswordResponseMessage, PasswordCopService}
+import org.scalatest.concurrent.ScalaFutures
 
 class PasswordCopServiceSpec extends AsyncWordSpec with Matchers with BeforeAndAfterAll {
 
@@ -18,32 +21,30 @@ class PasswordCopServiceSpec extends AsyncWordSpec with Matchers with BeforeAndA
 
   override protected def afterAll() = server.stop()
 
-  "password-cop service" should {
+  "password-cop service" should{
 
-    /*"say hello" in {
-      client.hello("Alice").invoke().map { answer =>
-        answer should ===("Hello, Alice!")
-      }
+      "invalid password check should throw InvalidCommandException" in {
+
+        val f = client.changePassword.invoke(ChangePasswordMessage("bob@bobsemail.com", "toosimple"))
+        ScalaFutures.whenReady(f) { answer =>
+          answer shouldBe a [InvalidCommandException]
+        }
     }
 
-    "allow responding with a custom message" in {
-      for {
-        _ <- client.useGreeting("Bob").invoke(GreetingMessage("Hi"))
-        answer <- client.hello("Bob").invoke()
-      } yield {
-        answer should ===("Hi, Bob!")
-      }
-    }*/
 
-    "invalid password check" in {
-      client.changePassword.invoke( ChangePasswordMessage("bob@bobsemail.com", "pass")).map { answer =>
-        answer should === ( ChangePasswordResponseMessage("bob@bobsemail.com", false, Some("Unable to change password")) )
-      }
-    }
-
-    "valid password check" in {
+    "valid password check not existing" in {
       client.changePassword.invoke( ChangePasswordMessage("bob@bobsemail.com", "pAssWordIs!@Strong123")).map { answer =>
         answer should === ( ChangePasswordResponseMessage("bob@bobsemail.com", true, None) )
+      }
+    }
+
+    "valid password check for existing" in {
+      client.changePassword.invoke( ChangePasswordMessage("bob2@bobsemail.com", "pAssWordIs!@Strong123")).map { answer =>
+        answer should === ( ChangePasswordResponseMessage("bob2@bobsemail.com", true, None) )
+      }
+
+      client.changePassword.invoke( ChangePasswordMessage("bob2@bobsemail.com", "pAssWordIs!@Strong1234")).map { answer =>
+        answer should === ( ChangePasswordResponseMessage("bob2@bobsemail.com", true, None) )
       }
     }
 

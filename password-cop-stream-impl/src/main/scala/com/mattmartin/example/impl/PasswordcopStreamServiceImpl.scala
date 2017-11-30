@@ -9,7 +9,8 @@ import scala.concurrent.Future
   * Implementation of the PasswordcopStreamService.
   */
 class PasswordcopStreamServiceImpl(passwordcopService: PasswordCopService) extends PasswordcopStreamService {
-  def stream = ServiceCall { hellos =>
+  def stream = ???/*ServiceCall { hellos =>
     Future.successful(hellos.mapAsync(8)(passwordcopService.hello(_).invoke()))
-  }
+  }*/
+
 }
