@@ -4,6 +4,7 @@ import java.time.Instant
 
 import com.lightbend.lagom.scaladsl.api.ServiceCall
 import com.lightbend.lagom.scaladsl.api.broker.Topic
+import com.lightbend.lagom.scaladsl.api.transport.NotFound
 import com.lightbend.lagom.scaladsl.broker.TopicProducer
 import com.lightbend.lagom.scaladsl.persistence.{EventStreamElement, PersistentEntityRegistry}
 import com.mattmartin.example.api.{ChangePasswordResponseMessage, PasswordChanged, PasswordCopService}
@@ -50,7 +51,7 @@ class PasswordcopServiceImpl(persistentEntityRegistry: PersistentEntityRegistry)
 
     ref.ask(GetLastPasswordChanged(userIdEmail)).map {
       case None => {
-        Console.println("No password")
+        throw NotFound(s"User with id $userIdEmail")
         true
       }
       case Some(pi) => {

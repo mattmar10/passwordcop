@@ -29,8 +29,20 @@ trait PasswordCopService extends Service {
     */
   //def useGreeting(id: String): ServiceCall[GreetingMessage, Done]
 
+
+  /**
+    * Changes the password for a given userId. Will add a user if one is not found by the given
+    * userId.
+    *
+    * Example: curl -H "Content-Type: application/json" -X POST -d '{"userId":
+    * "bob@bobsemail.com", "password":"thisIs@StrongPAssworD!"}' http://localhost:9000/api/changePassword
+    */
   def changePassword: ServiceCall[ChangePasswordMessage, ChangePasswordResponseMessage]
 
+  /**
+    * Checks if the given userId has a password that is expired. If no user found, returns
+    *
+    */
   def checkPasswordExpired(userIdEmail: String): ServiceCall[NotUsed, Boolean]
 
 
@@ -46,8 +58,6 @@ trait PasswordCopService extends Service {
     // @formatter:off
     named("password-cop")
       .withCalls(
-        //pathCall("/api/hello/:id", hello _),
-        //pathCall("/api/hello/:id", useGreeting _),
         pathCall("/api/checkPasswordExpiration/:userIdEmail", checkPasswordExpired _),
         pathCall("/api/changePassword", changePassword )
       )
